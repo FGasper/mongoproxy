@@ -36,19 +36,19 @@ func init() {
 func Log(level int, format string, args ...interface{}) {
 	switch level {
 	case CRITICAL:
-		log.Critical(format, args...)
+		log.Criticalf(format, args...)
 	case ERROR:
-		log.Error(format, args...)
+		log.Errorf(format, args...)
 	case WARNING:
-		log.Warning(format, args...)
+		log.Warningf(format, args...)
 	case NOTICE:
-		log.Notice(format, args...)
+		log.Noticef(format, args...)
 	case INFO:
-		log.Info(format, args...)
+		log.Infof(format, args...)
 	case DEBUG:
-		log.Debug(format, args...)
+		log.Debugf(format, args...)
 	default:
-		log.Error(format, args...)
+		log.Errorf(format, args...)
 	}
 }
 
