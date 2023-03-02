@@ -115,7 +115,7 @@ func (m *Mockule) Process(req messages.Requester, res messages.Responder,
 
 			reply, err := m.handleOpMsg(message)
 			if err == nil {
-				res.Write(reply)
+				res.Write(*reply)
 				return
 			} else {
 				Log(ERROR, "%v", err)
@@ -169,6 +169,8 @@ func (m *Mockule) getPostUrl() string {
 }
 
 func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) {
+	Log(DEBUG, "Marshalling BSON: %v", msg)
+
 	reqBody, err := bson.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to marshal parsed OP_MSG to BSON: %v", err)
@@ -198,6 +200,9 @@ func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) 
 		return nil, fmt.Errorf("Failed to send HTTP POST to %s: %v", m.getPostUrl(), err)
 	}
 
+	Log(DEBUG, "HTTP response: %v", resp)
+
+	// Every case needs the body, so we read it proactively.
 	body, readErr := io.ReadAll(resp.Body)
 
 	if !httpRespSucceeded(resp) {
@@ -208,6 +213,8 @@ func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) 
 		return nil, fmt.Errorf("Received HTTP failure response: %v %s", resp, string(body))
 	}
 
+	Log(DEBUG, "HTTP response is a success")
+
 	if resp.Header.Get("Content-Type") != bsonContentType {
 		if readErr != nil {
 			Log(ERROR, "Failed to read non-BSON HTTP response body: %v", readErr)
@@ -216,15 +223,21 @@ func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) 
 		return nil, fmt.Errorf("Received non-BSON HTTP response: %v %s", resp, string(body))
 	}
 
+	Log(DEBUG, "HTTP response is the right content type")
+
 	if readErr != nil {
-		return nil, fmt.Errorf("Failed to read HTTP response: %v", readErr)
+		return nil, fmt.Errorf("Failed to read HTTP response body: %v", readErr)
 	}
+
+	Log(DEBUG, "Got HTTP response body")
 
 	respMsg := messages.Message{}
 	err = bson.Unmarshal(body, &respMsg)
 	if err != nil {
 		return nil, fmt.Errorf("Failed parse HTTP response body as BSON: %v", err)
 	}
+
+	Log(DEBUG, "Unmarshalled BSON: %v", respMsg)
 
 	return &respMsg, nil
 }
@@ -234,11 +247,11 @@ func httpRespSucceeded(resp *http.Response) bool {
 }
 
 func (m *Mockule) getHttpClient() *http.Client {
-	if (nil == m.httpClient.Transport) {
+//	if (nil == m.httpClient.Transport) {
 		m.httpClient.Transport = &http.Transport{
 			IdleConnTimeout: maxTimeoutSecs * time.Second,
 		}
-	}
+//	}
 
 	return &m.httpClient;
 }
