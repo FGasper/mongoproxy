@@ -68,9 +68,9 @@ func SetLogLevel(level int) {
 	case INFO:
 		backendLeveled.SetLevel(logging.INFO, "global")
 	case DEBUG:
-		backendLeveled.SetLevel(logging.DEBUG, "global")
+		fallthrough
 	default:
-		backendLeveled.SetLevel(logging.ERROR, "global")
+		backendLeveled.SetLevel(logging.DEBUG, "global")
 	}
 
 }

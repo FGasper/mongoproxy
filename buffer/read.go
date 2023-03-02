@@ -65,6 +65,21 @@ func ReadInt32LE(reader io.Reader) (int32, error) {
 	return ConvertToInt32LE(buffer), nil
 }
 
+/*
+func Discard(reader io.Reader, count uint32) error {
+	n, err := reader.Read(buffer)
+	if err != nil && err != io.EOF {
+		return fmt.Errorf("error reading %d bytes: %v", count, err)
+	}
+
+	if n < count {
+		return fmt.Errorf("exhausted input stream; got %d bytes but wanted %d", n, count)
+	}
+
+	return nil
+}
+*/
+
 // ReadInt64LE reads a 64-bit long from a reader with little endian encoding.
 func ReadInt64LE(reader io.Reader) (int64, error) {
 	// Read the first 4 bytes from the connection

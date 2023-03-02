@@ -3,9 +3,13 @@ package main
 import (
 	"flag"
 	"github.com/mongodbinc-interns/mongoproxy"
-	. "github.com/mongodbinc-interns/mongoproxy/log"
+	"github.com/mongodbinc-interns/mongoproxy/log"
 	"gopkg.in/mgo.v2/bson"
 )
+
+const DEFAULT_PORT int = 8124
+const DEFAULT_CONFIG_URI string = "mongodb://localhost:27017"
+const DEFAULT_CONFIG_NS string = "test.config"
 
 var (
 	port            int
@@ -16,33 +20,44 @@ var (
 )
 
 func parseFlags() {
-	flag.IntVar(&port, "port", 8124, "port to listen on")
-	flag.IntVar(&logLevel, "logLevel", 3, "verbosity for logging")
-	flag.StringVar(&mongoURI, "m", "mongodb://localhost:27017",
-		"MongoDB instance to connect to for configuration.")
-	flag.StringVar(&configNamespace, "c", "test.config",
-		"Namespace to query for configuration.")
+	flag.IntVar(&port, "port", DEFAULT_PORT, "Port to listen on")
+	flag.IntVar(&logLevel, "logLevel", log.NOTICE, "Verbosity for logging")
+	flag.StringVar(
+		&mongoURI,
+		"m",
+		DEFAULT_CONFIG_URI,
+		"MongoDB instance to connect to for configuration",
+	)
+	flag.StringVar(
+		&configNamespace,
+		"c",
+		DEFAULT_CONFIG_NS,
+		"MongoDB namespace to query for configuration.",
+	)
 	flag.StringVar(&configFilename, "f", "",
-		"JSON config filename. If set, will be used instead of mongoDB configuration.")
+		"Config filename. If set, will be used instead of MongoDB.")
 	flag.Parse()
 }
 
 func main() {
 
 	parseFlags()
-	SetLogLevel(logLevel)
+	log.SetLogLevel(logLevel)
 
 	// grab config file
 	var result bson.M
 	var err error
-	if len(configFilename) == 0 {
+	if len(configFilename) > 0 {
+		result, err = mongoproxy.ParseConfigFromFile(configFilename)
+	} else if len(configNamespace) > 0 {
+		log.Log(log.INFO, "namespace=%s", configNamespace)
 		result, err = mongoproxy.ParseConfigFromDB(mongoURI, configNamespace)
 	} else {
-		result, err = mongoproxy.ParseConfigFromFile(configFilename)
+		log.Log(log.ERROR, "Need either a DB namespace or filename for config")
 	}
 
 	if err != nil {
-		Log(WARNING, "%v", err)
+		log.Log(log.WARNING, "%v", err)
 	}
 
 	mongoproxy.StartWithConfig(port, result)

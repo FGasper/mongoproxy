@@ -1,8 +1,9 @@
 package mongoproxy
 
 import (
-	"encoding/json"
 	"fmt"
+	"encoding/json"
+	"github.com/BurntSushi/toml"
 	"github.com/mongodbinc-interns/mongoproxy/convert"
 	. "github.com/mongodbinc-interns/mongoproxy/log"
 	"github.com/mongodbinc-interns/mongoproxy/messages"
@@ -10,25 +11,47 @@ import (
 	_ "github.com/mongodbinc-interns/mongoproxy/server/config"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/yaml.v3"
 	"io"
 	"io/ioutil"
 	"net"
+	"strings"
 )
 
-// ParseConfigFromFile takes a filename for a JSON file, and returns a configuration
+// ParseConfigFromFile takes a filename for a TOML file, and returns a configuration
 // object from the file, and an error if there was an error reading or unmarshalling the file.
 func ParseConfigFromFile(configFilename string) (bson.M, error) {
 	var result bson.M
 
-	file, err := ioutil.ReadFile(configFilename)
+	content, err := ioutil.ReadFile(configFilename)
 	if err != nil {
 		return nil, fmt.Errorf("Error reading configuration file: %v", err)
 	}
 
-	err = json.Unmarshal(file, &result)
-	if err != nil {
-		return nil, fmt.Errorf("Invalid JSON Configuration: %v", err)
+	idx := strings.LastIndex(configFilename, ".")
+	if idx == -1 {
+		return nil, fmt.Errorf("“%s” lacks a filename extension", configFilename)
 	}
+	extension := configFilename[1+idx:]
+
+	switch extension {
+		// NB: Doesn’t work presently
+		case "toml":
+			_, err = toml.Decode(string(content), &result)
+
+		case "json":
+			err = json.Unmarshal(content, &result)
+		case "yaml":
+			err = yaml.Unmarshal(content, &result)
+		default:
+			err = fmt.Errorf("Unrecognized extension: “%s”", extension)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to parse “%s”: %v", configFilename, err)
+	}
+fmt.Printf("config: %#v\n", result)
+
 	return result, nil
 }
 
@@ -40,10 +63,11 @@ func ParseConfigFromDB(mongoURI string, configNamespace string) (bson.M, error) 
 	var result bson.M
 
 	mongoSession, err := mgo.Dial(mongoURI)
-	defer mongoSession.Close()
 	if err != nil {
 		return nil, fmt.Errorf("Error connecting to MongoDB instance: %v", err)
 	}
+
+	defer mongoSession.Close()
 
 	database, collection, err := messages.ParseNamespace(configNamespace)
 	if err != nil {
@@ -146,11 +170,6 @@ func handleConnection(conn net.Conn, pipeline server.PipelineFunc) {
 
 		// update, delete, and insert messages do not have a response, so we continue and write the
 		// response on the getLastError that will be called immediately after. Kind of a hack.
-		if msgHeader.OpCode == messages.OP_UPDATE || msgHeader.OpCode == messages.OP_INSERT ||
-			msgHeader.OpCode == messages.OP_DELETE {
-			Log(INFO, "Continuing on OpCode: %v", msgHeader.OpCode)
-			continue
-		}
 		if err != nil {
 			Log(ERROR, "Encoding error: %v", err)
 			conn.Close()

@@ -4,13 +4,30 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/mongodbinc-interns/mongoproxy/buffer"
-	"github.com/mongodbinc-interns/mongoproxy/convert"
 	. "github.com/mongodbinc-interns/mongoproxy/log"
 	"gopkg.in/mgo.v2/bson"
 	"io"
 	"strings"
 )
+
+var allowedOpQueryCommands = []string{
+	"ismaster",
+	"isMaster",
+}
+
+const opQueryCollection string = "$cmd"
+
+const MSG_HEADER_LENGTH uint8 = 16
+
+func opQueryCommandAllowed(name string) bool {
+	for _, allowed := range allowedOpQueryCommands {
+		if allowed == name {
+			return true
+		}
+	}
+
+	return false;
+}
 
 func splitCommandOpQuery(q bson.D) (string, bson.M) {
 	commandName := q[0].Name
@@ -59,170 +76,10 @@ func createCommand(header MsgHeader, commandName string, database string, args b
 	return c
 }
 
-func createFind(header MsgHeader, database string, args bson.M) (Find, error) {
-
-	c := args["find"]
-	collection, ok := c.(string)
-	if !ok {
-		// we have issues
-		return Find{}, fmt.Errorf("Find command has no collection.")
-	}
-
-	f := Find{
-		RequestID:       header.RequestID,
-		Database:        database,
-		Collection:      collection,
-		Filter:          convert.ToBSONDoc(args["filter"]),
-		Projection:      convert.ToBSONDoc(args["projection"]),
-		Skip:            convert.ToInt32(args["skip"]),
-		Limit:           convert.ToInt32(args["limit"]),
-		Tailable:        convert.ToBool(args["tailable"]),
-		OplogReplay:     convert.ToBool(args["oplogReplay"]),
-		NoCursorTimeout: convert.ToBool(args["noCursorTimeout"]),
-		AwaitData:       convert.ToBool(args["awaitData"]),
-		Partial:         convert.ToBool(args["partial"]),
-	}
-
-	return f, nil
-}
-
-func createInsert(header MsgHeader, database string, args bson.M) (Insert, error) {
-	c := args["insert"]
-	collection, ok := c.(string)
-	if !ok {
-		// we have issues
-		return Insert{}, fmt.Errorf("Insert command has no collection.")
-	}
-	docs := args["documents"]
-	documents, err := convert.ConvertToBSONDocSlice(docs)
-	if err != nil {
-		return Insert{}, fmt.Errorf("Insert command has no documents.")
-	}
-	insert := Insert{
-		RequestID:  header.RequestID,
-		Database:   database,
-		Collection: collection,
-		Documents:  documents,
-		Ordered:    convert.ToBool(args["ordered"], true),
-	}
-
-	writeConcern := convert.ToBSONMap(args["writeConcern"])
-	if writeConcern != nil {
-		insert.WriteConcern = &writeConcern
-	}
-
-	return insert, nil
-}
-
-func createDelete(header MsgHeader, database string, args bson.M) (Delete, error) {
-	c := args["delete"]
-	collection, ok := c.(string)
-	if !ok {
-		// can't go on without a collection
-		return Delete{}, fmt.Errorf("Delete command has no collection.")
-	}
-
-	argsDeletesRaw := args["deletes"]
-	argsDeletes, ok := argsDeletesRaw.([]bson.M)
-	if !ok {
-		return Delete{}, fmt.Errorf("Delete command has no deletes.")
-	}
-
-	deletes := make([]SingleDelete, len(argsDeletes))
-	for i := 0; i < len(argsDeletes); i++ {
-		d := argsDeletes[i]
-		singleDelete := SingleDelete{
-			Selector: convert.ToBSONDoc(d["q"]),
-			Limit:    convert.ToInt32(d["limit"]),
-		}
-
-		deletes[i] = singleDelete
-	}
-
-	delObj := Delete{
-		RequestID:  header.RequestID,
-		Database:   database,
-		Collection: collection,
-		Deletes:    deletes,
-		Ordered:    convert.ToBool(args["ordered"], true),
-	}
-
-	writeConcern := convert.ToBSONMap(args["writeConcern"])
-	if writeConcern != nil {
-		delObj.WriteConcern = &writeConcern
-	}
-
-	return delObj, nil
-}
-
-func createUpdate(header MsgHeader, database string, args bson.M) (Update, error) {
-
-	c := args["update"]
-	collection, ok := c.(string)
-	if !ok {
-		// we have issues
-		return Update{}, fmt.Errorf("Update command has no collection.")
-	}
-
-	argsUpdatesRaw := args["updates"]
-	argsUpdates, ok := argsUpdatesRaw.([]bson.M)
-	if !ok {
-		return Update{}, fmt.Errorf("Update command has no updates.")
-	}
-
-	updates := make([]SingleUpdate, len(argsUpdates))
-	for i := 0; i < len(argsUpdates); i++ {
-		u := argsUpdates[i]
-		singleUpdate := SingleUpdate{
-			Selector: convert.ToBSONDoc(u["q"]),
-			Update:   convert.ToBSONDoc(u["u"]),
-			Upsert:   convert.ToBool(u["upsert"]),
-			Multi:    convert.ToBool(u["multi"]),
-		}
-
-		updates[i] = singleUpdate
-	}
-
-	update := Update{
-		RequestID:  header.RequestID,
-		Database:   database,
-		Collection: collection,
-		Updates:    updates,
-		Ordered:    convert.ToBool(args["ordered"]),
-	}
-
-	writeConcern := convert.ToBSONMap(args["writeConcern"])
-	if writeConcern != nil {
-		update.WriteConcern = &writeConcern
-	}
-
-	return update, nil
-}
-
-func createGetMore(header MsgHeader, database string, args bson.M) (GetMore, error) {
-
-	c := args["collection"]
-	collection, ok := c.(string)
-	if !ok {
-		// we have issues
-		return GetMore{}, fmt.Errorf("GetMore command has no collection.")
-	}
-	g := GetMore{
-		RequestID:  header.RequestID,
-		Database:   database,
-		Collection: collection,
-		BatchSize:  convert.ToInt32(args["batchSize"]),
-		CursorID:   convert.ToInt64(args["getMore"]),
-	}
-
-	return g, nil
-
-}
-
 // reads a header from the reader (16 bytes), consistent with wire protocol
 func processHeader(reader io.Reader) (MsgHeader, error) {
 	// read the message header
-	msgHeaderBytes := make([]byte, 16)
+	msgHeaderBytes := make([]byte, MSG_HEADER_LENGTH)
 	n, err := reader.Read(msgHeaderBytes)
 	if err != nil && err != io.EOF {
 		return MsgHeader{}, err
@@ -247,342 +104,191 @@ func processHeader(reader io.Reader) (MsgHeader, error) {
 	return mHeader, nil
 }
 
-// anything with OpCode 2004 goes here
-func processOpQuery(reader io.Reader, header MsgHeader) (Requester, error) {
-	// flags
-	flags, err := buffer.ReadInt32LE(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading flags: %v", err)
+func decodeBSON(buffer []byte) (bson.D, uint32, error) {
+	var err error
+	var doc bson.D
+	var bsonLen uint32
+
+	if (len(buffer) < 4) {
+		err = fmt.Errorf("Found few bytes (%d) to store BSON document length", len(buffer))
 	}
 
-	// namespace
-
-	// cut off the string at the remaining message length in case it is not
-	// null terminated.
-	maxStringBytes := header.MessageLength - // length of the whole wire protocol message
-		16 - // bytes representing the header
-		4 // bytes representing the flags
-	numNamespaceBytes, namespace, err := buffer.ReadNullTerminatedString(reader, maxStringBytes)
-	if err != nil {
-		return nil, fmt.Errorf("error reading null terminated string: %v", err)
-	}
-	database, collection, err := ParseNamespace(namespace)
-
-	if err != nil {
-		return nil, fmt.Errorf("error parsing namespace: %v", err)
-	}
-
-	// numberToSkip
-	skip, err := buffer.ReadInt32LE(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading NumberToSkip: %v", err)
-	}
-
-	// numberToReturn
-	limit, err := buffer.ReadInt32LE(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading NumberToReturn: %v", err)
-	}
-
-	// query
-	var docSize int32
-	docSize, q, err := buffer.ReadDocument(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading query: %v", err)
-	}
-	totalBytesRead := 16 + // bytes representing the header
-		4 + // bytes representing flags
-		numNamespaceBytes + // bytes representing the namespace
-		4 + // bytes representing numberToSkip (skip)
-		4 + // bytes representing numberToReturn (limit)
-		docSize // bytes representing the query
-
-	// optional projection
-	var projection bson.D
-	if totalBytesRead < header.MessageLength {
-		_, projection, err = buffer.ReadDocument(reader)
-		if err != nil {
-			if err != io.EOF {
-				return nil, fmt.Errorf("error reading projection: %v", err)
-			}
+	if err == nil {
+		bsonLen = binary.LittleEndian.Uint32(buffer)
+		if bsonLen > uint32(len(buffer)) {
+			err = fmt.Errorf("Found few bytes (%d) to store BSON document length", len(buffer))
 		}
 	}
 
-	// figure out what kind of struct to actually produce
-	switch collection {
-	case "$cmd":
-		cName, args := splitCommandOpQuery(q)
-		var c Requester
-		switch cName {
-		case "insert":
-			// convert documents to an array of bson.D so that the struct
-			// knows what to do with them.
-			i, err := convert.ConvertToBSONDocSlice(args["documents"])
+	if err == nil {
+		err = bson.Unmarshal(buffer, &doc)
+	}
 
-			if err != nil {
-				i = make([]bson.D, 0)
+	return doc, bsonLen, err
+}
+
+func decodeCString(buffer []byte) (string, error) {
+	nullAt := bytes.IndexByte(buffer, 0)
+	if nullAt == -1 {
+		return "", fmt.Errorf("Malformed string: no terminating NUL")
+	}
+
+	return string(buffer[:nullAt]), nil
+}
+
+func decodeUint32(buffer []byte) (uint32, error) {
+	if len(buffer) < 4 {
+		return 0, fmt.Errorf("Too few bytes (%d) to store a uint32", len(buffer))
+	}
+
+	return binary.LittleEndian.Uint32(buffer), nil
+}
+
+func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
+	flags, err := decodeUint32(msgBody)
+	if err != nil {
+		return nil, err
+	}
+
+	msgBodyLen := uint32(len(msgBody))
+	cursor := uint32(4)  // sizeof uint32
+
+	msg := Message{
+		RequestID: header.RequestID,
+		FlagBits: flags,
+	}
+
+	foundType0 := false
+
+	for cursor < msgBodyLen {
+		if (msgBodyLen - cursor == 4) {
+			if (flags & OP_MSG_FLAG_CHECKSUM_PRESENT) != 0 {
+				// TODO: Verify checksum
+				Log(DEBUG, "Checksum present; skipping verification (unimplemented)")
+				break
 			}
-
-			args["documents"] = i
-
-			c, err = createInsert(header, database, args)
-			if err != nil {
-				return nil, err
-			}
-		case "update":
-			// convert updates to an array of bson.M so that the struct
-			// knows what to do with them.
-			u, err := convert.ConvertToBSONMapSlice(args["updates"])
-
-			if err != nil {
-				u = make([]bson.M, 0)
-			}
-
-			args["updates"] = u
-
-			c, err = createUpdate(header, database, args)
-			if err != nil {
-				return nil, err
-			}
-		case "delete":
-
-			d, err := convert.ConvertToBSONMapSlice(args["deletes"])
-			if err != nil {
-				d = make([]bson.M, 0)
-			}
-
-			args["deletes"] = d
-
-			c, err = createDelete(header, database, args)
-			if err != nil {
-				return nil, err
-			}
-		default:
-			c = createCommand(header, cName, database, args)
 		}
 
-		return c, nil
-	default:
-		// find command
-		args := bson.M{}
+		sectionType := msgBody[cursor]
+		cursor++
 
-		// this is to more closely match the command spec
-		args["find"] = collection
+		switch sectionType {
+			case 0:
+				if (foundType0) {
+					return nil, fmt.Errorf(">1 main section")
+				}
 
-		args["tailable"] = convert.ReadBit32LE(flags, 1)
-		args["slaveOk"] = convert.ReadBit32LE(flags, 2)
-		args["oplogReplay"] = convert.ReadBit32LE(flags, 3)
-		args["noCursorTimeout"] = convert.ReadBit32LE(flags, 4)
-		args["awaitData"] = convert.ReadBit32LE(flags, 5)
-		args["partial"] = convert.ReadBit32LE(flags, 7)
+				foundType0 = true
 
-		args["skip"] = skip
-		args["limit"] = limit
+				doc, bsonLen, err := decodeBSON(msgBody[cursor:])
+				if err != nil {
+					return nil, err
+				}
 
-		// the actual query
-		args["filter"] = q
-		args["projection"] = projection
+				msg.Main = doc
 
-		f, err := createFind(header, database, args)
-		if err != nil {
-			return nil, err
+				cursor += bsonLen
+
+			case 1:
+				sectionLen, err := decodeUint32(msgBody)
+				if err != nil {
+					return nil, err
+				}
+
+				if sectionLen > msgBodyLen - cursor {
+					return nil, fmt.Errorf("Section claims too much size (%d; only %d left)", sectionLen, msgBodyLen - cursor)
+				}
+
+				sectionCursor := 4 + cursor
+
+				identifier, err := decodeCString(msgBody[sectionCursor:])
+				if err != nil {
+					return nil, err
+				}
+
+				// “Pre-advance” the cursor.
+				cursor += sectionLen
+
+				sectionCursor += 1 + uint32(len(identifier))
+
+				docs := []bson.D{}
+
+				for sectionCursor < cursor {
+					doc, bsonLen, err := decodeBSON(msgBody[sectionCursor:])
+					if err != nil {
+						return nil, err
+					}
+
+					docs = append(docs, doc)
+					sectionCursor += bsonLen
+				}
+
+				msg.Auxiliary[identifier] = docs
+
+			default:
+				return nil, fmt.Errorf("Unknown section type: %d", sectionType)
 		}
-		return f, nil
 	}
 
+	if !foundType0 {
+		return nil, fmt.Errorf("No type-0 sections in OP_MSG body")
+	}
+
+	return &msg, nil
 }
 
-// OpCode 2001
-func processOpUpdate(reader io.Reader, header MsgHeader) (Requester, error) {
-	buffer.ReadInt32LE(reader) // the zero (not used in wire protocol)
+func processOpQuery(msgBody []byte, header MsgHeader) (Requester, error) {
 
-	// namespace
-
-	// cut off the string at the remaining message length in case it is not
-	// null terminated.
-	maxStringBytes := header.MessageLength -
-		16 - // bytes representing the header
-		4 // the zero
-	_, namespace, err := buffer.ReadNullTerminatedString(reader, maxStringBytes)
-	if err != nil {
-		return nil, fmt.Errorf("error reading null terminated string: %v", err)
-	}
+	// Skip 4 bytes for the flags, which we don't need.
+	namespace, err := decodeCString(msgBody[4:])
 
 	database, collection, err := ParseNamespace(namespace)
+
 	if err != nil {
 		return nil, fmt.Errorf("error parsing namespace: %v", err)
 	}
 
-	// flags
-	flags, err := buffer.ReadInt32LE(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading flags: %v", err)
+	if collection != opQueryCollection {
+		return nil, fmt.Errorf("OP_QUERY is only for the “%s” collection, not “%s”", opQueryCollection, collection)
 	}
 
-	// selector
-	_, selector, err := buffer.ReadDocument(reader)
+	// 4 bytes for flags
+	// 4 bytes for numberToSkip
+	// 4 bytes for numberToReturn
+	// 1 byte for namespace's NULL
+
+	bsonBytes := msgBody[13 + len(namespace):]
+
+	document := bson.D{}
+	err = bson.Unmarshal(bsonBytes, &document)
 	if err != nil {
-		return nil, fmt.Errorf("error reading selector: %v", err)
+		return nil, err
 	}
 
-	// update
-	_, updator, err := buffer.ReadDocument(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading selector: %v", err)
+	cName, args := splitCommandOpQuery(document)
+	if !opQueryCommandAllowed(cName) {
+		return nil, fmt.Errorf("OP_QUERY forbids the “%s” command (only allows: %v)", cName, allowedOpQueryCommands)
 	}
 
-	// create a proper update command
-	args := bson.M{}
-	updateObj := bson.M{}
-	updateObj["q"] = selector
-	updateObj["u"] = updator
-	updateObj["upsert"] = convert.ReadBit32LE(flags, 0)
-	updateObj["multi"] = convert.ReadBit32LE(flags, 1)
-	args["update"] = collection
-	updates := make([]bson.M, 0)
-	updates = append(updates, updateObj)
-	args["updates"] = updates
-
-	return createUpdate(header, database, args)
+	return createCommand(header, cName, database, args), nil
 }
 
-// OpCode 2002
-func processOpInsert(reader io.Reader, header MsgHeader) (Requester, error) {
-	flags, err := buffer.ReadInt32LE(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading flags: %v", err)
-	}
-
-	// namespace
-
-	// cut off the string at the remaining message length in case it is not
-	// null terminated.
-	maxStringBytes := header.MessageLength -
-		16 - // bytes representing the header
-		4 // bytes representing flags
-	numNamespaceBytes, namespace, err := buffer.ReadNullTerminatedString(reader, maxStringBytes)
-	if err != nil {
-		return nil, fmt.Errorf("error reading null terminated string: %v", err)
-	}
-
-	database, collection, err := ParseNamespace(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing namespace: %v", err)
-	}
-
-	// documents to insert
-	totalBytesRead := 16 + 4 + numNamespaceBytes
-	docs := make([]bson.D, 0)
-	for totalBytesRead < header.MessageLength {
-		n, doc, err := buffer.ReadDocument(reader)
-		if err != nil {
-			if err != io.EOF {
-				return Insert{}, fmt.Errorf("error reading document: %v", err)
-			}
-		}
-		docs = append(docs, doc)
-		totalBytesRead += n
-	}
-
-	args := bson.M{}
-	args["insert"] = collection
-	args["ordered"] = !convert.ReadBit32LE(flags, 0)
-	args["documents"] = docs
-
-	return createInsert(header, database, args)
-
+type opCodeDecoderT func([]byte, MsgHeader) (Requester, error)
+var opCodeDecoder = map[int32]opCodeDecoderT {
+	OP_QUERY: processOpQuery,
+	OP_MSG: processOpMsg,
 }
 
-// OpCode 2005
-func processOpGetMore(reader io.Reader, header MsgHeader) (Requester, error) {
-	buffer.ReadInt32LE(reader) // the zero (not used in wire protocol)
+func slurpMessageBody(ioReader io.Reader, header MsgHeader) ([]byte, error) {
+	bodyLength := header.MessageLength - int32(MSG_HEADER_LENGTH)
+	msgBody := make([]byte, bodyLength)
 
-	// namespace
-
-	// cut off the string at the remaining message length in case it is not
-	// null terminated.
-	maxStringBytes := header.MessageLength -
-		16 - // bytes representing the header
-		4 // the zero
-	_, namespace, err := buffer.ReadNullTerminatedString(reader, maxStringBytes)
+	_, err := ioReader.Read(msgBody)
 	if err != nil {
-		return nil, fmt.Errorf("error reading null terminated string: %v", err)
+		return nil, fmt.Errorf("Failed to read %d-byte message: %v", bodyLength, err)
 	}
 
-	database, collection, err := ParseNamespace(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing namespace: %v", err)
-	}
-
-	// numToReturn
-	batchSize, err := buffer.ReadInt32LE(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing batch size: %v", err)
-	}
-
-	// cursorID
-	cursorID, err := buffer.ReadInt64LE(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing cursor ID: %v", err)
-	}
-
-	args := bson.M{}
-	args["getMore"] = cursorID
-	args["collection"] = collection
-	args["batchSize"] = batchSize
-
-	return createGetMore(header, database, args)
-}
-
-// OpCode 2006
-func processOpDelete(reader io.Reader, header MsgHeader) (Requester, error) {
-	buffer.ReadInt32LE(reader) // the zero (not used in wire protocol)
-
-	// namespace
-
-	// cut off the string at the remaining message length in case it is not
-	// null terminated.
-	maxStringBytes := header.MessageLength -
-		16 - // bytes representing the header
-		4 // the zero
-	_, namespace, err := buffer.ReadNullTerminatedString(reader, maxStringBytes)
-	if err != nil {
-		return nil, fmt.Errorf("error reading null terminated string: %v", err)
-	}
-
-	database, collection, err := ParseNamespace(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing namespace: %v", err)
-	}
-
-	// flags
-	flags, err := buffer.ReadInt32LE(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading flags: %v", err)
-	}
-
-	// selector
-	_, selector, err := buffer.ReadDocument(reader)
-	if err != nil {
-		return nil, fmt.Errorf("error reading selector: %v", err)
-	}
-
-	args := bson.M{}
-	args["delete"] = collection
-	deletes := make([]bson.M, 1)
-	delObj := bson.M{}
-	delObj["q"] = selector
-
-	if convert.ReadBit32LE(flags, 0) {
-		delObj["limit"] = 1
-	} else {
-		delObj["limit"] = 0
-	}
-
-	deletes[0] = delObj
-	args["deletes"] = deletes
-
-	return createDelete(header, database, args)
+	return msgBody, nil
 }
 
 // Decodes a wire protocol message from a connection into a Requester to pass
@@ -592,42 +298,26 @@ func processOpDelete(reader io.Reader, header MsgHeader) (Requester, error) {
 func Decode(reader io.Reader) (Requester, MsgHeader, error) {
 	mHeader, err := processHeader(reader)
 
-	if err != nil {
-		return nil, MsgHeader{}, err
+	var req Requester;
+	var decoderFunc opCodeDecoderT
+
+	if err == nil {
+		decoderFunc = opCodeDecoder[mHeader.OpCode]
+
+		if decoderFunc == nil {
+			err = fmt.Errorf("unimplemented operation: %#v", mHeader)
+		}
 	}
 
-	switch mHeader.OpCode {
-	case OP_UPDATE:
-		opu, err := processOpUpdate(reader, mHeader)
-		if err != nil {
-			return nil, MsgHeader{}, err
-		}
-		return opu, mHeader, nil
-	case OP_INSERT:
-		opi, err := processOpInsert(reader, mHeader)
-		if err != nil {
-			return nil, MsgHeader{}, err
-		}
-		return opi, mHeader, nil
-	case OP_QUERY:
-		opq, err := processOpQuery(reader, mHeader)
-		if err != nil {
-			return nil, MsgHeader{}, err
-		}
-		return opq, mHeader, nil
-	case OP_GET_MORE:
-		opg, err := processOpGetMore(reader, mHeader)
-		if err != nil {
-			return nil, MsgHeader{}, err
-		}
-		return opg, mHeader, nil
-	case OP_DELETE:
-		opd, err := processOpDelete(reader, mHeader)
-		if err != nil {
-			return nil, MsgHeader{}, err
-		}
-		return opd, mHeader, nil
-	default:
-		return nil, MsgHeader{}, fmt.Errorf("unimplemented operation: %#v", mHeader)
+	var msgBody []byte
+
+	if err == nil {
+		msgBody, err = slurpMessageBody(reader, mHeader)
 	}
+
+	if err == nil {
+		req, err = decoderFunc(msgBody, mHeader)
+	}
+
+	return req, mHeader, err
 }
