@@ -165,7 +165,8 @@ func (m *Mockule) getPostUrl() string {
 		urlBase = urlBase[:len(urlBase)-2]
 	}
 
-	return urlBase + "/op_msg";
+	//return urlBase + "/op_msg";
+	return urlBase
 }
 
 func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) {
@@ -235,6 +236,16 @@ func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) 
 	err = bson.Unmarshal(body, &respMsg)
 	if err != nil {
 		return nil, fmt.Errorf("Failed parse HTTP response body as BSON: %v", err)
+	}
+
+	if 0 == len(respMsg.Main) {
+		generic := bson.D{}
+		err2 := bson.Unmarshal(body, &generic)
+		if err2 == nil {
+			return nil, fmt.Errorf("Response body (%v) schema is wrong", generic)
+		}
+
+		return nil, fmt.Errorf("Response body (failed to parse: %v) schema is wrong", err2)
 	}
 
 	Log(DEBUG, "Unmarshalled BSON: %v", respMsg)

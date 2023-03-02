@@ -81,10 +81,10 @@ func (c Command) GetArg(arg string) interface{} {
 type MessageAuxiliary map[string][]bson.D
 
 type Message struct {
-	RequestID   int32				`bson:"requestID"`
-	FlagBits	uint32				`bson:"flagBits"`
-	Main 		bson.D				`bson:"main"`
-	Auxiliary   MessageAuxiliary	`bson:"auxiliary:"`
+	RequestID   int32
+	FlagBits	uint32
+	Main 		bson.D
+	Auxiliary   MessageAuxiliary
 }
 
 func (_ Message) Type() string {
