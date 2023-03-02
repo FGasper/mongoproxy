@@ -4,10 +4,12 @@
 - Only OP_MSG-supporting MongoDB clients are allowed.
 - Configure via `config.yaml`.
 - Requests get sent as `application/bson`.
-- Only OP_MSG gets sent via REST. BSON structure is:
+- Only OP_MSG gets sent via REST.
+
+BSON structure (for HTTP requests and responses) is:
 ```
 {
-    requestID: int32,
+    requestID: int32,   // Do responses need this??
     flagBits: uint32,   // always 0 for now
     main: document      // the OP_MSG’s “type-0” section
     auxiliary: {        // the OP_MSG’s “type-1” sections, if any
