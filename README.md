@@ -2,7 +2,7 @@
 
 - Only `mockule` module works.
 - Only OP_MSG-supporting MongoDB clients are allowed.
-- Configure via `config.yaml`.
+- Configure via `config.yaml`. (Or `config.json` if you prefer.)
 - HTTP method is POST.
 - Content-Type is `application/bson` (for requests & responses).
 - Only OP_MSG gets sent via REST.
