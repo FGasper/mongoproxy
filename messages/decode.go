@@ -157,6 +157,11 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 		return nil, fmt.Errorf("exhaustAllowed flag given but is forbidden")
 	}
 
+	// Likewise.
+	if (flags & OP_MSG_FLAG_MORE_TO_COME) != 0 {
+		return nil, fmt.Errorf("moreToCome flag given but is forbidden")
+	}
+
 	msgBodyLen := uint32(len(msgBody))
 	cursor := uint32(4)  // sizeof uint32
 

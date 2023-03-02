@@ -26,9 +26,10 @@ const (
 
 	urlBaseConfName = "urlBase"
 	headersConfName = "headers"
-)
 
-var maxWireVersion = 17
+	minWireVersion = 6
+	maxWireVersion = 17
+)
 
 // a 'database' in memory. The string keys are the collections, which
 // have an array of bson documents.
@@ -106,7 +107,6 @@ func (m *Mockule) Process(req messages.Requester, res messages.Responder,
 
 	switch req.Type() {
 		case messages.MessageType:
-Log(DEBUG, "processing OP_MSG")
 			message, err := messages.ToMessageRequest(req)
 			if err != nil {
 				Log(ERROR, "ToMessageRequest: %v", err)
@@ -137,7 +137,7 @@ Log(DEBUG, "processing OP_MSG")
 						"secondary": false,
 						"localTime": bson.Now(),
 						"maxWireVersion": maxWireVersion,
-						"minWireVersion": 0,
+						"minWireVersion": minWireVersion,
 						"maxWriteBatchSize": 1000,
 						"maxBsonObjectSize": 16777216,
 						"maxMessageSizeBytes": 48000000,

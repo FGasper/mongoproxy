@@ -1,3 +1,31 @@
+# Felipe’s Branch
+
+- Only `mockule` module works.
+- Only OP_MSG-supporting MongoDB clients are allowed.
+- Configure via `config.yaml`.
+- Requests get sent as `application/bson`.
+- Only OP_MSG gets sent via REST. BSON structure is:
+```
+{
+    requestID: int32,
+    flagBits: uint32,   // always 0 for now
+    main: document      // the OP_MSG’s “type-0” section
+    auxiliary: {        // the OP_MSG’s “type-1” sections, if any
+        foo: document[]
+        bar: document[]
+        …
+    }
+}
+```
+Example invocation:
+```
+go run main/server.go -port 28000 -logLevel 5 -f config.yaml
+```
+
+Original documentation follows; it may or may not apply here.
+
+<hr>
+
 # Mongoproxy
 
 A server that speaks the MongoDB wire protocol, and can analyze and transform requests and responses to and from a client and a MongoDB server instance. All requests go through a module pipeline, and modules include a proxy to send requests to `mongod`, as well as a module to collect real-time analytics about the requests passing through the server.
