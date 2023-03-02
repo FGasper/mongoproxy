@@ -1,6 +1,10 @@
 # Felipe’s Branch
 
 - Only `mockule` module works.
+- “Exhaust cursors” are unsupported. Most MongoDB drivers don’t use them,
+  but (as of this writing) at least PyMongo (optionally) does.
+- “Fire-and-forget” requests are unsupported; i.e., we expect to send a
+  response to all requests.
 - Only OP_MSG-supporting MongoDB clients are allowed.
 - Configure via `config.yaml`. (Or `config.json` if you prefer.)
   - `urlBase` will have `/op_msg` appended for actual requests.
