@@ -3,6 +3,10 @@
 - Only `mockule` module works.
 - Only OP_MSG-supporting MongoDB clients are allowed.
 - Configure via `config.yaml`. (Or `config.json` if you prefer.)
+  - `urlBase` will have `/op_msg` appended for actual requests.
+  - `headers` is an array of 2-value arrays.
+  - NB: Go’s YAML parser (mistakenly) parses some YAML values as numbers,
+    not strings. So put quotes as necessary to prevent that.
 - HTTP method is POST.
 - Content-Type is `application/bson` (for requests & responses).
 - Only OP_MSG gets sent via REST.
