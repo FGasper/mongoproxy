@@ -11,7 +11,7 @@
 - Content-Type is `application/bson` (for requests & responses).
 - Only OP_MSG gets sent via REST.
 
-BSON structure (for HTTP requests and responses) is:
+BSON structure is:
 ```
 {
     requestID: int32,   // Do responses need this??
