@@ -165,7 +165,7 @@ func (m *Mockule) getPostUrl() string {
 		urlBase = urlBase[:len(urlBase)-2]
 	}
 
-	return urlBase + "?op_msg";
+	return urlBase + "/op_msg";
 }
 
 func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) {
