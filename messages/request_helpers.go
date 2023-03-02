@@ -12,10 +12,10 @@ func ToCommandRequest(r Requester) (Command, error) {
 	return c, nil
 }
 
-func ToMessageRequest(r Requester) (Message, error) {
-	m, ok := r.(Message)
+func ToMessageRequest(r Requester) (*Message, error) {
+	m, ok := r.(*Message)
 	if !ok {
-		return Message{}, fmt.Errorf("Requester was not a Message object. Requester received instead: %#v", r)
+		return nil, fmt.Errorf("Requester was not a Message object. Requester received instead: %#v", r)
 	}
 	return m, nil
 }

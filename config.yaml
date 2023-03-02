@@ -1,0 +1,7 @@
+---
+modules:
+    - name: mockule
+      config:
+        urlBase: https://example.com/api
+        headers:
+          - [ foo, bar ]

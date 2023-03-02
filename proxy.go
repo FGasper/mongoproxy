@@ -116,7 +116,8 @@ func StartWithConfig(port int, config bson.M) {
 	if ok {
 		modules, err = convert.ConvertToBSONMapSlice(modulesRaw)
 		if err != nil {
-			Log(WARNING, "Invalid module configuration: %v. Proxy will start with no modules.", err)
+			Log(CRITICAL, "Invalid module configuration: %v. Proxy cannot start .", err)
+			return
 		}
 	} else {
 		Log(WARNING, "No modules provided. Proxy will start without modules.")
@@ -140,8 +141,8 @@ func StartWithConfig(port int, config bson.M) {
 		moduleConfig := convert.ToBSONMap(modules[i]["config"])
 		err := module.Configure(moduleConfig)
 		if err != nil {
-			Log(WARNING, "Invalid configuration for module %v: %v", moduleName, err)
-			continue
+			Log(CRITICAL, "Invalid configuration for module %v: %v", moduleName, err)
+			return
 		}
 		chain.AddModule(module)
 	}

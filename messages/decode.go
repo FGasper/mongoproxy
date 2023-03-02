@@ -150,12 +150,20 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 		return nil, err
 	}
 
+	// We needn’t support this for now. More context:
+	// https://github.com/mongodb/specifications/blob/master/source/message/OP_MSG.rst#exhaustallowed
+	//
+	if (flags & OP_MSG_FLAG_EXHAUST_ALLOWED) != 0 {
+		return nil, fmt.Errorf("exhaustAllowed flag given but is forbidden")
+	}
+
 	msgBodyLen := uint32(len(msgBody))
 	cursor := uint32(4)  // sizeof uint32
 
 	msg := Message{
 		RequestID: header.RequestID,
 		FlagBits: flags,
+		Auxiliary: MessageAuxiliary{},
 	}
 
 	foundType0 := false

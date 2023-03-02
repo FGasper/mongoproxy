@@ -3,6 +3,9 @@
 package messages
 
 import (
+	"fmt"
+	"bytes"
+	"github.com/mongodbinc-interns/mongoproxy/buffer"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -75,13 +78,65 @@ func (c Command) GetArg(arg string) interface{} {
 
 // ----------------------------------------------------------------------
 
+type MessageAuxiliary map[string][]bson.D
+
 type Message struct {
-	RequestID   int32
-	FlagBits	uint32
-	Main 		bson.D
-	Auxiliary   map[string][]bson.D
+	RequestID   int32				`bson:"requestID"`
+	FlagBits	uint32				`bson:"flagBits"`
+	Main 		bson.D				`bson:"main"`
+	Auxiliary   MessageAuxiliary	`bson:"auxiliary:"`
 }
 
-func (m Message) Type() string {
+func (_ Message) Type() string {
 	return MessageType
+}
+
+func (m Message) ToBytes(header MsgHeader) ([]byte, error) {
+	resHeader := createResponseHeader(header)
+
+	mainBson, err := bson.Marshal(m.Main)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to marshal main OP_MSG data: %v", err)
+	}
+
+	buf := bytes.NewBuffer([]byte{})
+
+	err = buffer.WriteToBuf(
+		buf,
+		resHeader, // size will be filled in later
+		uint32(0), // no flags
+		uint8(0),  // first section is type 0
+		mainBson,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("Failed to initialize OP_MSG: %v", err)
+	}
+
+	for identifier, bsonDocs := range m.Auxiliary {
+		err := buffer.WriteToBuf(
+			buf,
+			uint32(1),            // type 1 section
+			identifier, uint8(0), // NUL-terminated string
+		)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to initialize “%s” in OP_MSG: %v", identifier, err)
+		}
+
+		for _, bsonDoc := range bsonDocs {
+			err := buffer.WriteToBuf( buf, bsonDoc )
+			if err != nil {
+				return nil, fmt.Errorf("Failed to extend “%s” in OP_MSG: %v", identifier, err)
+			}
+		}
+	}
+
+	respBytes := buf.Bytes()
+	respBytes = setMessageSize(respBytes)
+
+	return respBytes, nil
+}
+
+func (m Message) ToBSON() bson.M {
+	panic("unimplemented")
 }
