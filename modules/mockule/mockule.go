@@ -230,7 +230,7 @@ func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) 
 }
 
 func httpRespSucceeded(resp *http.Response) bool {
-	return resp.StatusCode < 200 || resp.StatusCode > 299
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }
 
 func (m *Mockule) getHttpClient() *http.Client {

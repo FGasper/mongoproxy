@@ -2,6 +2,6 @@
 modules:
     - name: mockule
       config:
-        urlBase: https://example.com/api
+        urlBase: http://65.1.9.2:3003
         headers:
           - [ foo, bar ]
