@@ -11,6 +11,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
+type RequestID int32
 type OpCode int32
 
 // constants representing the different opcodes for the wire protocol.
@@ -33,15 +34,15 @@ const (
 // a struct to represent a wire protocol message header.
 type MsgHeader struct {
 	MessageLength int32
-	RequestID     int32
-	ResponseTo    int32
+	RequestID     RequestID
+	ResponseTo    RequestID
 	OpCode        OpCode
 }
 
 // struct for a generic command, the default Requester sent from proxy
 // core to modules
 type Command struct {
-	RequestID   int32
+	RequestID   RequestID
 	CommandName string
 	Database    string
 	Args        bson.M
@@ -86,9 +87,15 @@ func (c Command) GetArg(arg string) interface{} {
 type MessageAuxiliary map[string][]bson.D
 
 type Message struct {
-	RequestID   int32
+	RequestID   RequestID
 	FlagBits	uint32
-	Main 		bson.D
+
+	// The wire protocol docs say that we’re fine to merge the
+	// “auxiliary” sections into the body section; however, those docs
+	// are meant more for clients than for servers. It’s best for us
+	// to preserve the distinction between sections just in case
+	// proxy modules need it, now or in the future.
+	Body 		bson.D   `bson:"main"` //  TODO: remove
 	Auxiliary   MessageAuxiliary
 }
 
@@ -99,9 +106,9 @@ func (_ Message) Type() string {
 func (m Message) ToBytes(header MsgHeader) ([]byte, error) {
 	resHeader := createResponseHeader(header, OP_MSG)
 
-	mainBson, err := bson.Marshal(m.Main)
+	mainBson, err := bson.Marshal(m.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to marshal main OP_MSG data: %v", err)
+		return nil, fmt.Errorf("Failed to marshal OP_MSG body document: %v", err)
 	}
 
 	buf := bytes.NewBuffer([]byte{})

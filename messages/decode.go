@@ -8,6 +8,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 	"io"
 	"strings"
+	set "github.com/deckarep/golang-set/v2"
 )
 
 var allowedOpQueryCommands = []string{
@@ -150,14 +151,15 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 		return nil, err
 	}
 
-	// We needn’t support this for now. More context:
-	// https://github.com/mongodb/specifications/blob/master/source/message/OP_MSG.rst#exhaustallowed
-	//
+	// exhaustAllowed gets used in service discovery. It may or may
+	// not be something we need to support.
 	if (flags & OP_MSG_FLAG_EXHAUST_ALLOWED) != 0 {
-		Log(WARNING, "exhaustAllowed flag given but is forbidden")
+		Log(WARNING, "exhaustAllowed flag given; discarding …")
+		flags = flags ^ OP_MSG_FLAG_EXHAUST_ALLOWED
 	}
 
-	// Likewise.
+	// moreToCome from a client indicates a fire-and-forget request.
+	// For now we’ll withhold support for that.
 	if (flags & OP_MSG_FLAG_MORE_TO_COME) != 0 {
 		return nil, fmt.Errorf("moreToCome flag given but is forbidden")
 	}
@@ -172,6 +174,8 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 	}
 
 	foundType0 := false
+
+	seenNames := set.NewThreadUnsafeSet[string]()
 
 	for cursor < msgBodyLen {
 		if (msgBodyLen - cursor == 4) {
@@ -188,7 +192,7 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 		switch sectionType {
 			case 0:
 				if (foundType0) {
-					return nil, fmt.Errorf(">1 main section")
+					return nil, fmt.Errorf(">1 body section")
 				}
 
 				foundType0 = true
@@ -198,7 +202,13 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 					return nil, err
 				}
 
-				msg.Main = doc
+				for _, DocElem := range doc {
+					if !seenNames.Add(DocElem.Name) {
+						return nil, fmt.Errorf("Duplicate identifier: %s", DocElem.Name)
+					}
+				}
+
+				msg.Body = doc
 
 				cursor += bsonLen
 
@@ -217,6 +227,10 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 				identifier, err := decodeCString(msgBody[sectionCursor:])
 				if err != nil {
 					return nil, err
+				}
+
+				if !seenNames.Add(identifier) {
+					return nil, fmt.Errorf("Duplicate section identifier: %s", identifier)
 				}
 
 				// “Pre-advance” the cursor.
@@ -244,7 +258,7 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 	}
 
 	if !foundType0 {
-		return nil, fmt.Errorf("No type-0 sections in OP_MSG body")
+		return nil, fmt.Errorf("OP_MSG lacks a body section")
 	}
 
 	return &msg, nil

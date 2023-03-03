@@ -238,7 +238,7 @@ func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) 
 		return nil, fmt.Errorf("Failed parse HTTP response body as BSON: %v", err)
 	}
 
-	if 0 == len(respMsg.Main) {
+	if 0 == len(respMsg.Body) {
 		generic := bson.D{}
 		err2 := bson.Unmarshal(body, &generic)
 		if err2 == nil {
