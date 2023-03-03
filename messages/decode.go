@@ -154,7 +154,7 @@ func processOpMsg(msgBody []byte, header MsgHeader) (Requester, error) {
 	// https://github.com/mongodb/specifications/blob/master/source/message/OP_MSG.rst#exhaustallowed
 	//
 	if (flags & OP_MSG_FLAG_EXHAUST_ALLOWED) != 0 {
-		return nil, fmt.Errorf("exhaustAllowed flag given but is forbidden")
+		Log(WARNING, "exhaustAllowed flag given but is forbidden")
 	}
 
 	// Likewise.
