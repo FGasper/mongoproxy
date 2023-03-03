@@ -176,6 +176,7 @@ func handleConnection(conn net.Conn, pipeline server.PipelineFunc) {
 			conn.Close()
 			return
 		}
+
 		_, err = conn.Write(bytes)
 		if err != nil {
 			Log(ERROR, "Error writing to connection: %v", err)

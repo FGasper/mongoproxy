@@ -35,10 +35,10 @@ func marshalReplyDocs(reply interface{}, docs []bson.D) ([]byte, error) {
 	return replyBytes, nil
 }
 
-func createResponseHeader(reqHeader MsgHeader) MsgHeader {
+func createResponseHeader(reqHeader MsgHeader, opcode OpCode) MsgHeader {
 	mHeader := MsgHeader{
 		ResponseTo: reqHeader.RequestID, // requestID from the original request
-		OpCode:     1,
+		OpCode:     opcode,
 	}
 	return mHeader
 }
@@ -61,7 +61,7 @@ func setMessageSize(resp []byte) []byte {
 // to those two commands.
 // http://docs.mongodb.org/meta-driver/latest/legacy/mongodb-wire-protocol/
 func EncodeBSON(reqHeader MsgHeader, b bson.M) ([]byte, error) {
-	resHeader := createResponseHeader(reqHeader)
+	resHeader := createResponseHeader(reqHeader, OP_REPLY)
 
 	// we just return 1 object, which is b.
 	numberReturned := 1

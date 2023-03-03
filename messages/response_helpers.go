@@ -26,7 +26,7 @@ type CommandResponse struct {
 }
 
 func (c CommandResponse) ToBytes(header MsgHeader) ([]byte, error) {
-	resHeader := createResponseHeader(header)
+	resHeader := createResponseHeader(header, OP_REPLY)
 	startingFrom := int32(0)
 
 	flags := int32(8)

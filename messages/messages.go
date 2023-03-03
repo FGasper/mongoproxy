@@ -5,13 +5,18 @@ package messages
 import (
 	"fmt"
 	"bytes"
+
+	. "github.com/mongodbinc-interns/mongoproxy/log"
 	"github.com/mongodbinc-interns/mongoproxy/buffer"
 	"gopkg.in/mgo.v2/bson"
 )
 
+type OpCode int32
+
 // constants representing the different opcodes for the wire protocol.
 const (
-	OP_QUERY int32    = 2004
+	OP_QUERY OpCode    = 2004
+	OP_REPLY          = 1
 	OP_MSG			  = 2013
 
 	OP_MSG_FLAG_CHECKSUM_PRESENT uint32 = 1 << 0
@@ -30,7 +35,7 @@ type MsgHeader struct {
 	MessageLength int32
 	RequestID     int32
 	ResponseTo    int32
-	OpCode        int32
+	OpCode        OpCode
 }
 
 // struct for a generic command, the default Requester sent from proxy
@@ -92,7 +97,7 @@ func (_ Message) Type() string {
 }
 
 func (m Message) ToBytes(header MsgHeader) ([]byte, error) {
-	resHeader := createResponseHeader(header)
+	resHeader := createResponseHeader(header, OP_MSG)
 
 	mainBson, err := bson.Marshal(m.Main)
 	if err != nil {
@@ -133,6 +138,8 @@ func (m Message) ToBytes(header MsgHeader) ([]byte, error) {
 
 	respBytes := buf.Bytes()
 	respBytes = setMessageSize(respBytes)
+
+	Log(DEBUG, "response length: %d", len(respBytes))
 
 	return respBytes, nil
 }

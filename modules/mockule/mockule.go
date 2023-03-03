@@ -194,14 +194,14 @@ func (m *Mockule) handleOpMsg(msg *messages.Message) (*messages.Message, error) 
 
 	httpReq.Header.Set("Content-Type", bsonContentType)
 
-	Log(DEBUG, "Sending HTTP request: %v", httpReq)
+	Log(DEBUG, "Sending HTTP request %d: %v", msg.RequestID, httpReq)
 
 	resp, err := m.getHttpClient().Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to send HTTP POST to %s: %v", m.getPostUrl(), err)
 	}
 
-	Log(DEBUG, "HTTP response: %v", resp)
+	Log(DEBUG, "HTTP response %d: %v", msg.RequestID, resp)
 
 	// Every case needs the body, so we read it proactively.
 	body, readErr := io.ReadAll(resp.Body)

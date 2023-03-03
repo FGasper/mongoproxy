@@ -287,7 +287,7 @@ func processOpQuery(msgBody []byte, header MsgHeader) (Requester, error) {
 }
 
 type opCodeDecoderT func([]byte, MsgHeader) (Requester, error)
-var opCodeDecoder = map[int32]opCodeDecoderT {
+var opCodeDecoder = map[OpCode]opCodeDecoderT {
 	OP_QUERY: processOpQuery,
 	OP_MSG: processOpMsg,
 }
